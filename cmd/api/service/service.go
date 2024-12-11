@@ -45,7 +45,7 @@ func (s *Service) Authenticate(uuid, addrIP string) (*Tokens, error) {
 		return nil, fmt.Errorf("user not found")
 	}
 
-	return s.generateTokens(uuid, addrIP)
+	return s.generateTokensAndSetSession(uuid, addrIP)
 }
 
 func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
@@ -60,7 +60,7 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 		return nil, errors.New("new IP address, please confirm it")
 	}
 
-	newTokens, err := s.generateTokens(session.UserID, session.IP)
+	newTokens, err := s.generateTokensAndSetSession(session.UserID, session.IP)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func generateRefreshToken() string {
 	return b.String()
 }
 
-func (s *Service) generateTokens(uuid, addrIP string) (*Tokens, error) {
+func (s *Service) generateTokensAndSetSession(uuid, addrIP string) (*Tokens, error) {
 	TTLAccess, err := time.ParseDuration(os.Getenv("TTL_ACCESS"))
 	if err != nil {
 		return nil, err
