@@ -10,11 +10,15 @@ import (
 
 type Servicer interface {
 	Authenticate(string, string) (*service.Tokens, error)
-	Refresh()
+	RefreshTokens(string, string) (*service.Tokens, error)
 }
 
 type APIController struct {
 	Service Servicer
+}
+
+type inputRefresh struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
 func NewAPIController(s Servicer) *APIController {
@@ -24,9 +28,8 @@ func NewAPIController(s Servicer) *APIController {
 func (c *APIController) SetupRouter(r *gin.Engine) {
 	apiv1 := r.Group("/api/v1")
 
-	apiv1.POST("/auth/signin/:uuid", c.SignIn)
+	apiv1.GET("/auth/signin/:uuid", c.SignIn)
 	apiv1.POST("/auth/refresh", c.Refresh)
-
 }
 
 func (c *APIController) SignIn(ctx *gin.Context) {
@@ -41,5 +44,17 @@ func (c *APIController) SignIn(ctx *gin.Context) {
 }
 
 func (c *APIController) Refresh(ctx *gin.Context) {
+	var input inputRefresh
+	if err := ctx.ShouldBindJSON(&input); err != nil {
+		ctx.Error(err)
+		return
+	}
 
+	tokens, err := c.Service.RefreshTokens(input.RefreshToken, ctx.Request.RemoteAddr)
+	if err != nil {
+		ctx.Error(err)
+		return
+	}
+
+	ctx.JSON(http.StatusOK, tokens)
 }
