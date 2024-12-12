@@ -2,8 +2,8 @@ package service
 
 import (
 	"encoding/base64"
-	"errors"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -22,8 +22,13 @@ type Storager interface {
 	DeleteSession(int) error
 }
 
+type Emailer interface {
+	NotificationNewIP(string) error
+}
+
 type Service struct {
 	Storage Storager
+	Email   Emailer
 }
 
 type Tokens struct {
@@ -31,8 +36,8 @@ type Tokens struct {
 	RefreshToken []byte `json:"refresh_token"`
 }
 
-func NewService(str Storager) *Service {
-	return &Service{str}
+func NewService(str Storager, eml Emailer) *Service {
+	return &Service{str, eml}
 }
 
 func (s *Service) Authenticate(uuid, addrIP string) (*Tokens, error) {
@@ -45,7 +50,7 @@ func (s *Service) Authenticate(uuid, addrIP string) (*Tokens, error) {
 		return nil, fmt.Errorf("user not found")
 	}
 
-	return s.generateTokensAndSetSession(uuid, addrIP)
+	return s.GenerateTokensAndSetSession(uuid, addrIP)
 }
 
 func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
@@ -56,11 +61,18 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 	}
 
 	if session.IP != addrIP {
-		//TODO: отправка письма юзеру
-		return nil, errors.New("new IP address, please confirm it")
+		user, err := s.Storage.GetUserByUUID(session.UserID)
+		if err != nil {
+			return nil, err
+		}
+
+		err = s.Email.NotificationNewIP(user.Email)
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
-	newTokens, err := s.generateTokensAndSetSession(session.UserID, session.IP)
+	newTokens, err := s.GenerateTokensAndSetSession(session.UserID, session.IP)
 	if err != nil {
 		return nil, err
 	}
@@ -71,23 +83,9 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 	}
 
 	return newTokens, nil
-
 }
 
-func generateRefreshToken() string {
-	chars := []rune(
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-			"abcdefghijklmnopqrstuvwxyz" +
-			"0123456789")
-
-	var b strings.Builder
-	for i := 0; i < 20; i++ {
-		b.WriteRune(chars[rand.Intn(len(chars))])
-	}
-	return b.String()
-}
-
-func (s *Service) generateTokensAndSetSession(uuid, addrIP string) (*Tokens, error) {
+func (s *Service) GenerateTokensAndSetSession(uuid, addrIP string) (*Tokens, error) {
 	TTLAccess, err := time.ParseDuration(os.Getenv("TTL_ACCESS"))
 	if err != nil {
 		return nil, err
@@ -101,7 +99,7 @@ func (s *Service) generateTokensAndSetSession(uuid, addrIP string) (*Tokens, err
 
 	tokenJWTString, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payload).SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
-		return nil, fmt.Errorf("problem with signing token: ", err)
+		return nil, fmt.Errorf("problem with signing token: %s", err.Error())
 	}
 
 	refreshToken := []byte(generateRefreshToken())

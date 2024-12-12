@@ -34,7 +34,8 @@ func main() {
 
 	var (
 		str    = storage.NewStorage(db)
-		svc    = service.NewService(str)
+		eml    = service.NewEmailService(cfg.Email)
+		svc    = service.NewService(str, eml)
 		ctrl   = controller.NewAPIController(svc)
 		router = gin.Default()
 	)
