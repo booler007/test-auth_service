@@ -31,9 +31,15 @@ func main() {
 	}
 
 	var (
-		str    = storage.NewStorage(db)
-		eml    = service.NewEmailService(cfg.Email)
-		svc    = service.NewService(str, eml)
+		str = storage.NewStorage(db)
+		eml = service.NewEmailService(&cfg.Email)
+		svc = service.NewService(
+			str,
+			eml,
+			cfg.Auth.TTLAccess,
+			cfg.Auth.TTLRefresh,
+			cfg.Auth.JWTSecret,
+		)
 		ctrl   = controller.NewAPIController(svc)
 		router = gin.Default()
 	)

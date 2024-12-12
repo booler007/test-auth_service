@@ -3,13 +3,16 @@ package config
 import (
 	"log"
 	"os"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
 	Port  string `default:"8080"`
-	Auth  *auth
-	DB    *db
-	Email *Email
+	Auth  auth
+	DB    db
+	Email Email
 }
 
 type db struct {
@@ -26,14 +29,14 @@ type Email struct {
 }
 
 type auth struct {
-	TTLAccess  string `default:"30m"`
-	TTLRefresh string `default:"720h"`
-	JWTSecret  string `default:"secretWordJWT"`
+	TTLAccess  time.Duration `default:"30m"`
+	TTLRefresh time.Duration `default:"720h"`
+	JWTSecret  []byte        `default:"secretWordJWT"`
 }
 
 func Init() *Config {
 	var (
-		cfg *Config
+		cfg Config
 		ok  bool
 	)
 	cfg.Port = os.Getenv("PORT")
@@ -66,9 +69,19 @@ func Init() *Config {
 		log.Fatal("EMAIL_PASSWORD environment variable must be set")
 	}
 
-	cfg.Auth.TTLAccess = os.Getenv("TTL_ACCESS")
-	cfg.Auth.TTLRefresh = os.Getenv("TTL_REFRESH")
-	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
+	ttlAccess, err := time.ParseDuration(os.Getenv("TTL_ACCESS"))
+	if err != nil {
+		log.Fatal("TTL_ACCESS environment variable must be set")
+	}
 
-	return cfg
+	ttlRefresh, err := time.ParseDuration(os.Getenv("TTL_REFRESH"))
+	if err != nil {
+		log.Fatal("TTL_REFRESH environment variable must be set")
+	}
+
+	cfg.Auth.TTLRefresh = ttlRefresh
+	cfg.Auth.TTLAccess = ttlAccess
+	cfg.Auth.JWTSecret = []byte(os.Getenv("JWT_SECRET"))
+
+	return &cfg
 }

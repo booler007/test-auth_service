@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
@@ -27,8 +26,11 @@ type Emailer interface {
 }
 
 type Service struct {
-	Storage Storager
-	Email   Emailer
+	Storage    Storager
+	Email      Emailer
+	TTLAccess  time.Duration
+	TTLRefresh time.Duration
+	JWTSecret  []byte
 }
 
 type Tokens struct {
@@ -36,18 +38,19 @@ type Tokens struct {
 	RefreshToken []byte `json:"refresh_token"`
 }
 
-func NewService(str Storager, eml Emailer) *Service {
-	return &Service{str, eml}
+func NewService(str Storager, eml Emailer, acs, rfr time.Duration, srt []byte) *Service {
+	return &Service{
+		str,
+		eml,
+		acs,
+		rfr,
+		srt,
+	}
 }
 
 func (s *Service) Authenticate(uuid, addrIP string) (*Tokens, error) {
-	user, err := s.Storage.GetUserByUUID(uuid)
-	if err != nil {
+	if _, err := s.Storage.GetUserByUUID(uuid); err != nil {
 		return nil, err
-	}
-
-	if user.Email == "" {
-		return nil, fmt.Errorf("user not found")
 	}
 
 	return s.GenerateTokensAndSetSession(uuid, addrIP)
@@ -86,18 +89,13 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 }
 
 func (s *Service) GenerateTokensAndSetSession(uuid, addrIP string) (*Tokens, error) {
-	TTLAccess, err := time.ParseDuration(os.Getenv("TTL_ACCESS"))
-	if err != nil {
-		return nil, err
-	}
-
 	payload := jwt.MapClaims{
 		"uuid":   uuid,
 		"addrIP": addrIP,
-		"exp":    time.Now().Add(time.Hour * TTLAccess),
+		"exp":    time.Now().Add(time.Hour * s.TTLAccess),
 	}
 
-	tokenJWTString, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payload).SignedString([]byte(os.Getenv("JWT_SECRET")))
+	tokenJWTString, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payload).SignedString(s.JWTSecret)
 	if err != nil {
 		return nil, fmt.Errorf("problem with signing token: %s", err.Error())
 	}
@@ -107,21 +105,16 @@ func (s *Service) GenerateTokensAndSetSession(uuid, addrIP string) (*Tokens, err
 	refreshTokenBase64 := make([]byte, base64.StdEncoding.EncodedLen(len(refreshToken)))
 	base64.StdEncoding.Encode(refreshTokenBase64, refreshToken)
 
-	TTLRefresh, err := time.ParseDuration(os.Getenv("TTL_REFRESH"))
-	if err != nil {
-		return nil, err
-	}
-
 	bcryptRefreshToken, err := bcrypt.GenerateFromPassword(refreshToken, bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
 	}
 
 	newSession := &storage.Session{
-		UserID:       uuid,
-		RefreshToken: bcryptRefreshToken,
-		ExpiredAt:    time.Now().Add(time.Hour * TTLRefresh),
-		IP:           addrIP,
+		UserID:           uuid,
+		RefreshToken:     bcryptRefreshToken,
+		ExpiredAtRefresh: time.Now().Add(time.Hour * s.TTLRefresh),
+		IP:               addrIP,
 	}
 
 	err = s.Storage.SetSession(newSession)
