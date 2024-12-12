@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"authentication_medods/cmd/api/config"
 	"authentication_medods/cmd/api/controller"
@@ -17,8 +16,7 @@ import (
 )
 
 func main() {
-	cfg := &config.Config{}
-	cfg.Init()
+	cfg := config.Init()
 
 	dns := fmt.Sprintf(
 		"host=postgres user=%s password=%s  dbname=%s port=5432 sslmode=disable",
@@ -43,7 +41,7 @@ func main() {
 	ctrl.SetupRouter(router)
 
 	srv := &http.Server{
-		Addr:    ":" + os.Getenv("PORT"),
+		Addr:    ":" + cfg.Port,
 		Handler: router.Handler(),
 	}
 

@@ -31,39 +31,44 @@ type auth struct {
 	JWTSecret  string `default:"secretWordJWT"`
 }
 
-func (c *Config) Init() {
-	var ok bool
-	c.Port = os.Getenv("PORT")
+func Init() *Config {
+	var (
+		cfg *Config
+		ok  bool
+	)
+	cfg.Port = os.Getenv("PORT")
 
-	if c.DB.Name, ok = os.LookupEnv("POSTGRES_DB"); !ok {
+	if cfg.DB.Name, ok = os.LookupEnv("POSTGRES_DB"); !ok {
 		log.Fatal("POSTGRES_DB environment variable must be set")
 	}
 
-	if c.DB.User, ok = os.LookupEnv("POSTGRES_USER"); !ok {
+	if cfg.DB.User, ok = os.LookupEnv("POSTGRES_USER"); !ok {
 		log.Fatal("POSTGRES_USER environment variable must be set")
 	}
 
-	if c.DB.Pass, ok = os.LookupEnv("POSTGRES_PASSWORD"); !ok {
+	if cfg.DB.Pass, ok = os.LookupEnv("POSTGRES_PASSWORD"); !ok {
 		log.Fatal("POSTGRES_PASSWORD environment variable must be set")
 	}
 
-	if c.Email.Host = os.Getenv("EMAIL_HOST"); !ok {
+	if cfg.Email.Host, ok = os.LookupEnv("EMAIL_HOST"); !ok {
 		log.Fatal("EMAIL_HOST environment variable must be set")
 	}
 
-	if c.Email.Port = os.Getenv("EMAIL_PORT"); !ok {
+	if cfg.Email.Port, ok = os.LookupEnv("EMAIL_PORT"); !ok {
 		log.Fatal("EMAIL_PORT environment variable must be set")
 	}
 
-	if c.Email.Account = os.Getenv("EMAIL_ACCOUNT"); !ok {
+	if cfg.Email.Account, ok = os.LookupEnv("EMAIL_ACCOUNT"); !ok {
 		log.Fatal("EMAIL_ACCOUNT environment variable must be set")
 	}
 
-	if c.Email.Password = os.Getenv("EMAIL_PASSWORD"); !ok {
+	if cfg.Email.Password, ok = os.LookupEnv("EMAIL_PASSWORD"); !ok {
 		log.Fatal("EMAIL_PASSWORD environment variable must be set")
 	}
 
-	c.Auth.TTLAccess = os.Getenv("TTL_ACCESS")
-	c.Auth.TTLRefresh = os.Getenv("TTL_REFRESH")
-	c.Auth.JWTSecret = os.Getenv("JWT_SECRET")
+	cfg.Auth.TTLAccess = os.Getenv("TTL_ACCESS")
+	cfg.Auth.TTLRefresh = os.Getenv("TTL_REFRESH")
+	cfg.Auth.JWTSecret = os.Getenv("JWT_SECRET")
+
+	return cfg
 }
