@@ -6,7 +6,7 @@ import (
 )
 
 type Config struct {
-	Port  string `default:"3000"`
+	Port  string `default:"8080"`
 	Auth  *auth
 	DB    *db
 	Email *Email
