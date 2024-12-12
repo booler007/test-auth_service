@@ -119,22 +119,35 @@ func (s *Service) generateTokensAndSetSession(uuid, addrIP string) (*Tokens, err
 		return nil, err
 	}
 
-	session := &storage.Session{
+	newSession := &storage.Session{
 		UserID:       uuid,
 		RefreshToken: bcryptRefreshToken,
 		ExpiredAt:    time.Now().Add(time.Hour * TTLRefresh),
 		IP:           addrIP,
 	}
 
-	err = s.Storage.SetSession(session)
+	err = s.Storage.SetSession(newSession)
 	if err != nil {
 		return nil, err
 	}
 
-	tokens := &Tokens{
+	newTokens := &Tokens{
 		AccessToken:  tokenJWTString,
 		RefreshToken: refreshTokenBase64,
 	}
 
-	return tokens, nil
+	return newTokens, nil
+}
+
+func generateRefreshToken() string {
+	chars := []rune(
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
+			"abcdefghijklmnopqrstuvwxyz" +
+			"0123456789")
+
+	var b strings.Builder
+	for i := 0; i < 20; i++ {
+		b.WriteRune(chars[rand.Intn(len(chars))])
+	}
+	return b.String()
 }

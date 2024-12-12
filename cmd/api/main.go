@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"authentication_medods/cmd/api/config"
 	"authentication_medods/cmd/api/controller"
 	"authentication_medods/cmd/api/service"
 	"authentication_medods/cmd/api/storage"
@@ -16,12 +17,14 @@ import (
 )
 
 func main() {
+	cfg := &config.Config{}
+	cfg.Init()
 
 	dns := fmt.Sprintf(
 		"host=postgres user=%s password=%s  dbname=%s port=5432 sslmode=disable",
-		os.Getenv("POSTGRES_USER"),
-		os.Getenv("POSTGRES_PASSWORD"),
-		os.Getenv("POSTGRES_DB"),
+		cfg.DB.User,
+		cfg.DB.Pass,
+		cfg.DB.Name,
 	)
 
 	db, err := gorm.Open(postgres.Open(dns), &gorm.Config{})
