@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"authentication_medods/cmd/api/config"
 	"authentication_medods/cmd/api/controller"
@@ -43,7 +42,7 @@ func main() {
 	ctrl.SetupRouter(router)
 
 	srv := &http.Server{
-		Addr:    ":" + os.Getenv("PORT"),
+		Addr:    ":" + cfg.Port,
 		Handler: router.Handler(),
 	}
 
