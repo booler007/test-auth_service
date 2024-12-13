@@ -20,7 +20,7 @@ type Storager interface {
 }
 
 type Emailer interface {
-	NotificationNewIP(string) error
+	SendNotificationNewIP(string) error
 }
 
 type Service struct {
@@ -35,6 +35,11 @@ type Tokens struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 }
+
+var (
+	ErrInvalidRefreshToken      = errors.New("refresh token is invalid")
+	ErrProblemWithSigningTokens = errors.New("problem with signing token")
+)
 
 func NewService(str Storager, eml Emailer, acs, rfr time.Duration, srt []byte) *Service {
 	return &Service{
@@ -78,7 +83,7 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 
 	sign := strings.Split(string(decodeRefreshTokenBase64), ".")[2]
 	if !s.Storage.IsRefreshTokenValid(sign) {
-		return nil, errors.New("refresh token is invalid")
+		return nil, ErrInvalidRefreshToken
 	}
 
 	if claims["addrIP"] != addrIP {
@@ -87,7 +92,7 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 			return nil, err
 		}
 
-		err = s.Email.NotificationNewIP(user.Email)
+		err = s.Email.SendNotificationNewIP(user.Email)
 		if err != nil {
 			log.Println(err)
 		}
@@ -120,12 +125,12 @@ func generateTokens(uuid, addrIP string, ttlAccess, ttlRefresh time.Duration, jw
 
 	tokenAccess, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payloadAccess).SignedString(jwtSecret)
 	if err != nil {
-		return nil, fmt.Errorf("problem with signing access token: %s", err.Error())
+		return nil, ErrProblemWithSigningTokens
 	}
 
 	tokenRefresh, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payloadRefresh).SignedString(jwtSecret)
 	if err != nil {
-		return nil, fmt.Errorf("problem with signing access token: %s", err.Error())
+		return nil, ErrProblemWithSigningTokens
 	}
 
 	refreshTokenBase64 := base64.StdEncoding.EncodeToString([]byte(tokenRefresh))

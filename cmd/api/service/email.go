@@ -18,7 +18,7 @@ type EmailService struct {
 	Port     string
 }
 
-func (e *EmailService) NotificationNewIP(userEmail string) error {
+func (e *EmailService) SendNotificationNewIP(userEmail string) error {
 	subject := os.Getenv("Subject: Attention! Detected new IP\n")
 	body := "You have requested a new access token from a new IP"
 	message := []byte(subject + body)

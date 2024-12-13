@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"authentication_medods/cmd/api/service"
@@ -20,6 +21,8 @@ type APIController struct {
 type inputRefresh struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
+
+var ErrWithBind = errors.New("error occurred while binding the request body")
 
 func NewAPIController(s Servicer) *APIController {
 	return &APIController{s}
@@ -46,7 +49,7 @@ func (c *APIController) SignIn(ctx *gin.Context) {
 func (c *APIController) Refresh(ctx *gin.Context) {
 	var input inputRefresh
 	if err := ctx.ShouldBindJSON(&input); err != nil {
-		ctx.Error(err)
+		ctx.Error(ErrWithBind).SetType(gin.ErrorTypeBind)
 		return
 	}
 

@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"errors"
+
 	"gorm.io/gorm"
 )
 
@@ -17,6 +19,8 @@ type UsedRefreshTokens struct {
 	Signature string
 }
 
+var ErrUserNotFound = errors.New("user not found")
+
 func NewStorage(db *gorm.DB) *Storage {
 	return &Storage{db}
 }
@@ -25,6 +29,9 @@ func (s *Storage) GetUserByUUID(uuid string) (*User, error) {
 	var user User
 	res := s.DB.First(&user, "uuid = ?", uuid)
 	if res.Error != nil {
+		if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
 		return nil, res.Error
 	}
 
