@@ -2,23 +2,21 @@ package service
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log"
-	"math/rand"
 	"strings"
 	"time"
 
 	"authentication_medods/cmd/api/storage"
 
 	"github.com/golang-jwt/jwt/v5"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Storager interface {
 	GetUserByUUID(string) (*storage.User, error)
-	GetSessionByRefreshToken([]byte) (*storage.Session, error)
-	SetSession(session *storage.Session) error
-	DeleteSession(int) error
+	AddUsedRefreshToken(string) error
+	IsRefreshTokenValid(string) bool
 }
 
 type Emailer interface {
@@ -35,7 +33,7 @@ type Service struct {
 
 type Tokens struct {
 	AccessToken  string `json:"access_token"`
-	RefreshToken []byte `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 func NewService(str Storager, eml Emailer, acs, rfr time.Duration, srt []byte) *Service {
@@ -53,18 +51,38 @@ func (s *Service) Authenticate(uuid, addrIP string) (*Tokens, error) {
 		return nil, err
 	}
 
-	return s.GenerateTokensAndSetSession(uuid, addrIP)
+	return generateTokens(uuid, addrIP, s.TTLAccess, s.TTLRefresh, s.JWTSecret)
 }
 
 func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
-	hashRefreshToken, err := bcrypt.GenerateFromPassword([]byte(refreshToken), bcrypt.DefaultCost)
-	session, err := s.Storage.GetSessionByRefreshToken(hashRefreshToken)
+	decodeRefreshTokenBase64, err := base64.StdEncoding.DecodeString(refreshToken)
 	if err != nil {
 		return nil, err
 	}
 
-	if session.IP != addrIP {
-		user, err := s.Storage.GetUserByUUID(session.UserID)
+	token, err := jwt.Parse(string(decodeRefreshTokenBase64), func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return s.JWTSecret, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, err
+	}
+
+	sign := strings.Split(string(decodeRefreshTokenBase64), ".")[2]
+	if !s.Storage.IsRefreshTokenValid(sign) {
+		return nil, errors.New("refresh token is invalid")
+	}
+
+	if claims["addrIP"] != addrIP {
+		user, err := s.Storage.GetUserByUUID(claims["uuid"].(string))
 		if err != nil {
 			return nil, err
 		}
@@ -75,70 +93,47 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 		}
 	}
 
-	newTokens, err := s.GenerateTokensAndSetSession(session.UserID, session.IP)
+	newTokens, err := generateTokens(claims["uuid"].(string), addrIP, s.TTLAccess, s.TTLRefresh, s.JWTSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.Storage.DeleteSession(session.ID)
-	if err != nil {
+	if err = s.Storage.AddUsedRefreshToken(sign); err != nil {
 		return nil, err
 	}
 
 	return newTokens, nil
 }
 
-func (s *Service) GenerateTokensAndSetSession(uuid, addrIP string) (*Tokens, error) {
-	payload := jwt.MapClaims{
-		"uuid":   uuid,
-		"addrIP": addrIP,
-		"exp":    time.Now().Add(time.Hour * s.TTLAccess),
+func generateTokens(uuid, addrIP string, ttlAccess, ttlRefresh time.Duration, jwtSecret []byte) (*Tokens, error) {
+	payloadAccess := jwt.MapClaims{
+		"uuid":      uuid,
+		"addrIP":    addrIP,
+		"expiredAt": time.Now().Add(ttlAccess).Format(time.DateTime),
 	}
 
-	tokenJWTString, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payload).SignedString(s.JWTSecret)
+	payloadRefresh := jwt.MapClaims{
+		"uuid":      uuid,
+		"addrIP":    addrIP,
+		"expiredAt": time.Now().Add(ttlRefresh).Format(time.DateTime),
+	}
+
+	tokenAccess, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payloadAccess).SignedString(jwtSecret)
 	if err != nil {
-		return nil, fmt.Errorf("problem with signing token: %s", err.Error())
+		return nil, fmt.Errorf("problem with signing access token: %s", err.Error())
 	}
 
-	refreshToken := []byte(generateRefreshToken())
-
-	refreshTokenBase64 := make([]byte, base64.StdEncoding.EncodedLen(len(refreshToken)))
-	base64.StdEncoding.Encode(refreshTokenBase64, refreshToken)
-
-	bcryptRefreshToken, err := bcrypt.GenerateFromPassword(refreshToken, bcrypt.DefaultCost)
+	tokenRefresh, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payloadRefresh).SignedString(jwtSecret)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("problem with signing access token: %s", err.Error())
 	}
 
-	newSession := &storage.Session{
-		UserID:           uuid,
-		RefreshToken:     bcryptRefreshToken,
-		ExpiredAtRefresh: time.Now().Add(time.Hour * s.TTLRefresh),
-		IP:               addrIP,
-	}
-
-	err = s.Storage.SetSession(newSession)
-	if err != nil {
-		return nil, err
-	}
+	refreshTokenBase64 := base64.StdEncoding.EncodeToString([]byte(tokenRefresh))
 
 	newTokens := &Tokens{
-		AccessToken:  tokenJWTString,
+		AccessToken:  tokenAccess,
 		RefreshToken: refreshTokenBase64,
 	}
 
 	return newTokens, nil
-}
-
-func generateRefreshToken() string {
-	chars := []rune(
-		"ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-			"abcdefghijklmnopqrstuvwxyz" +
-			"0123456789")
-
-	var b strings.Builder
-	for i := 0; i < 20; i++ {
-		b.WriteRune(chars[rand.Intn(len(chars))])
-	}
-	return b.String()
 }

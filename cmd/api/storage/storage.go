@@ -1,9 +1,6 @@
 package storage
 
 import (
-	"fmt"
-	"time"
-
 	"gorm.io/gorm"
 )
 
@@ -12,18 +9,12 @@ type Storage struct {
 }
 
 type User struct {
-	Uuid             string
-	Email            string
-	RefreshToken     []byte
-	ExpiredAtRefresh time.Time
+	Uuid  string
+	Email string
 }
 
-type Session struct {
-	ID               int
-	UserID           string
-	RefreshToken     []byte
-	ExpiredAtRefresh time.Time
-	IP               string
+type UsedRefreshTokens struct {
+	Signature string
 }
 
 func NewStorage(db *gorm.DB) *Storage {
@@ -40,24 +31,10 @@ func (s *Storage) GetUserByUUID(uuid string) (*User, error) {
 	return &user, nil
 }
 
-func (s *Storage) GetSessionByRefreshToken(refreshToken []byte) (*Session, error) {
-	var session Session
-	res := s.DB.First(&session, "refresh_token = ?", refreshToken)
-	if res.Error != nil {
-		return nil, res.Error
-	}
-
-	if session.ExpiredAtRefresh.After(time.Now()) {
-		return &session, nil
-	}
-
-	return nil, fmt.Errorf("invalid refresh token")
+func (s *Storage) AddUsedRefreshToken(sgnt string) error {
+	return s.DB.Create(&UsedRefreshTokens{sgnt}).Error
 }
 
-func (s *Storage) SetSession(ss *Session) error {
-	return s.DB.Create(&ss).Error
-}
-
-func (s *Storage) DeleteSession(id int) error {
-	return s.DB.Where("id = ?", id).Delete(&Session{}).Error
+func (s *Storage) IsRefreshTokenValid(signature string) bool {
+	return s.DB.First(&UsedRefreshTokens{}, "signature = ?", signature).RowsAffected == 0
 }

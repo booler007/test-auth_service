@@ -11,7 +11,6 @@ import (
 type Servicer interface {
 	Authenticate(string, string) (*service.Tokens, error)
 	RefreshTokens(string, string) (*service.Tokens, error)
-	GenerateTokensAndSetSession(string, string) (*service.Tokens, error)
 }
 
 type APIController struct {
