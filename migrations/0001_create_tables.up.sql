@@ -4,5 +4,6 @@ CREATE TABLE IF NOT EXISTS users(
 );
 
 CREATE TABLE IF NOT EXISTS used_refresh_tokens (
-    signature varchar(100)
+    created_at timestamp,
+    hash varchar(100)
 );

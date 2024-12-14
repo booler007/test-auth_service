@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -16,7 +17,8 @@ type User struct {
 }
 
 type UsedRefreshTokens struct {
-	Signature string
+	CreatedAt time.Time
+	Hash      []byte
 }
 
 var ErrUserNotFound = errors.New("user not found")
@@ -38,10 +40,16 @@ func (s *Storage) GetUserByUUID(uuid string) (*User, error) {
 	return &user, nil
 }
 
-func (s *Storage) AddUsedRefreshToken(sgnt string) error {
-	return s.DB.Create(&UsedRefreshTokens{sgnt}).Error
+func (s *Storage) AddUsedRefreshToken(urt UsedRefreshTokens) error {
+	return s.DB.Create(&urt).Error
 }
 
-func (s *Storage) IsRefreshTokenValid(signature string) bool {
-	return s.DB.First(&UsedRefreshTokens{}, "signature = ?", signature).RowsAffected == 0
+func (s *Storage) GetRefreshTokensByTime(time time.Time) ([]UsedRefreshTokens, error) {
+	var hashes []UsedRefreshTokens
+	res := s.DB.Where("created_at = ?", time).Find(&hashes)
+	if res.Error != nil {
+		return nil, res.Error
+	}
+
+	return hashes, nil
 }

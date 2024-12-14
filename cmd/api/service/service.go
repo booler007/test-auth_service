@@ -5,18 +5,18 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"authentication_medods/cmd/api/storage"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type Storager interface {
 	GetUserByUUID(string) (*storage.User, error)
-	AddUsedRefreshToken(string) error
-	IsRefreshTokenValid(string) bool
+	AddUsedRefreshToken(storage.UsedRefreshTokens) error
+	GetRefreshTokensByTime(time.Time) ([]storage.UsedRefreshTokens, error)
 }
 
 type Emailer interface {
@@ -81,9 +81,32 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 		return nil, err
 	}
 
-	sign := strings.Split(string(decodeRefreshTokenBase64), ".")[2]
-	if !s.Storage.IsRefreshTokenValid(sign) {
-		return nil, ErrInvalidRefreshToken
+	createdTime, err := time.Parse(time.RFC3339Nano, claims["createdAt"].(string))
+	if err != nil {
+		return nil, err
+	}
+
+	fingerprintsOfRT, err := s.Storage.GetRefreshTokensByTime(createdTime)
+	if err != nil {
+		return nil, err
+	}
+	for _, fingerprint := range fingerprintsOfRT {
+		if err = bcrypt.CompareHashAndPassword(fingerprint.Hash, decodeRefreshTokenBase64[len(decodeRefreshTokenBase64)-49:]); err == nil {
+			return nil, ErrInvalidRefreshToken
+		}
+	}
+
+	hashedJWT, err := bcrypt.GenerateFromPassword(decodeRefreshTokenBase64[len(decodeRefreshTokenBase64)-49:], bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	fingerprintOfUsedRT := storage.UsedRefreshTokens{
+		CreatedAt: createdTime,
+		Hash:      hashedJWT,
+	}
+
+	if err = s.Storage.AddUsedRefreshToken(fingerprintOfUsedRT); err != nil {
+		return nil, err
 	}
 
 	if claims["addrIP"] != addrIP {
@@ -103,10 +126,6 @@ func (s *Service) RefreshTokens(refreshToken, addrIP string) (*Tokens, error) {
 		return nil, err
 	}
 
-	if err = s.Storage.AddUsedRefreshToken(sign); err != nil {
-		return nil, err
-	}
-
 	return newTokens, nil
 }
 
@@ -121,6 +140,7 @@ func generateTokens(uuid, addrIP string, ttlAccess, ttlRefresh time.Duration, jw
 		"uuid":      uuid,
 		"addrIP":    addrIP,
 		"expiredAt": time.Now().Add(ttlRefresh).Format(time.DateTime),
+		"createdAt": time.Now(),
 	}
 
 	tokenAccess, err := jwt.NewWithClaims(jwt.SigningMethodHS512, payloadAccess).SignedString(jwtSecret)

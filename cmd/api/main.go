@@ -44,6 +44,7 @@ func main() {
 		router = gin.Default()
 	)
 
+	router.Use(controller.ErrorMiddleware())
 	ctrl.SetupRouter(router)
 
 	srv := &http.Server{
